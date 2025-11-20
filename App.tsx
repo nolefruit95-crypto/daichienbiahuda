@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Trophy, AlertTriangle, RefreshCw, Beer, Play, Volume2, VolumeX, Coins, ChevronDown, UserPlus, X, Star, Sparkles, BarChart3, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Trophy, Volume2, VolumeX, Coins, ChevronDown, UserPlus, X, Sparkles, BarChart3, ArrowUpRight, ArrowDownRight, Play, RefreshCw, Beer } from 'lucide-react';
 import { Player, GameState, DEFAULT_PLAYER_NAMES, BET_OPTIONS } from './types';
 import PlayerCard from './components/PlayerCard';
 import { generatePenalty, generateCommentary } from './services/geminiService';
@@ -32,7 +32,6 @@ function App() {
 
   // --- Audio System (Web Audio API) ---
   const audioContextRef = useRef<AudioContext | null>(null);
-  const bubblesOscillatorRef = useRef<OscillatorNode | null>(null);
   const bubblesGainRef = useRef<GainNode | null>(null);
 
   const initAudio = () => {
@@ -47,7 +46,6 @@ function App() {
   const playBubbleSound = () => {
     if (!soundEnabled || !audioContextRef.current) return;
 
-    // Create a brown noise buffer for bubbling effect
     const bufferSize = 4096;
     const brownNoise = audioContextRef.current.createScriptProcessor(bufferSize, 1, 1);
     brownNoise.onaudioprocess = (e) => {
@@ -56,12 +54,11 @@ function App() {
             const white = Math.random() * 2 - 1;
             output[i] = (lastOut + (0.02 * white)) / 1.02;
             lastOut = output[i];
-            output[i] *= 3.5; // Compensate for gain
+            output[i] *= 3.5; 
         }
     };
     let lastOut = 0;
 
-    // Lowpass filter to make it sound underwater/liquid
     const filter = audioContextRef.current.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = 400;
@@ -73,14 +70,12 @@ function App() {
     filter.connect(gainNode);
     gainNode.connect(audioContextRef.current.destination);
 
-    bubblesGainRef.current = gainNode; // Store to stop later
-    // ScriptProcessor doesn't have start/stop, we disconnect the gain
+    bubblesGainRef.current = gainNode;
   };
 
   const stopBubbleSound = () => {
     if (bubblesGainRef.current) {
         const gain = bubblesGainRef.current;
-        // Fade out
         gain.gain.linearRampToValueAtTime(0, audioContextRef.current!.currentTime + 0.2);
         setTimeout(() => {
             gain.disconnect();
@@ -94,10 +89,9 @@ function App() {
       const osc = audioContextRef.current.createOscillator();
       const gain = audioContextRef.current.createGain();
       osc.type = 'triangle';
-      // Arpeggio effect
-      osc.frequency.setValueAtTime(523.25, audioContextRef.current.currentTime); // C5
-      osc.frequency.setValueAtTime(659.25, audioContextRef.current.currentTime + 0.1); // E5
-      osc.frequency.setValueAtTime(783.99, audioContextRef.current.currentTime + 0.2); // G5
+      osc.frequency.setValueAtTime(523.25, audioContextRef.current.currentTime); 
+      osc.frequency.setValueAtTime(659.25, audioContextRef.current.currentTime + 0.1);
+      osc.frequency.setValueAtTime(783.99, audioContextRef.current.currentTime + 0.2);
       
       gain.gain.setValueAtTime(0.1, audioContextRef.current.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.0001, audioContextRef.current.currentTime + 1);
@@ -111,7 +105,6 @@ function App() {
 
   // Initialize Players
   useEffect(() => {
-    // Load defaults only if players array is empty (first load)
     if (players.length === 0) {
         const initialPlayers: Player[] = DEFAULT_PLAYER_NAMES.map((name, index) => ({
             id: `p-${Date.now()}-${index}`,
@@ -125,13 +118,12 @@ function App() {
         setPlayers(initialPlayers);
     }
     
-    // Cleanup audio on unmount
     return () => {
         if (audioContextRef.current) {
             audioContextRef.current.close();
         }
     };
-  }, []); // Run once on mount
+  }, []); 
 
   const handleImageUpload = (playerId: string, file: File) => {
     const imageUrl = URL.createObjectURL(file);
@@ -173,7 +165,6 @@ function App() {
       return;
     }
 
-    // Start Sound
     initAudio();
     playBubbleSound();
 
@@ -193,9 +184,7 @@ function App() {
             return p;
           }
 
-          // Simulate drinking speed
           const instantSpeed = (Math.random() * 1.2 + 0.5) * p.speedFactor; 
-          // Adjusted multiplier for a smooth ~8-10 second race
           const decrement = instantSpeed * (delta / 1000) * 8; 
 
           const newLevel = Math.max(0, p.beerLevel - decrement);
@@ -230,7 +219,6 @@ function App() {
     if (gameState === GameState.FINISHED) {
       playWinSound();
       
-      // --- NEW PRIZE CALCULATION LOGIC ---
       const totalPot = players.length * betAmount;
       const rawSecond = totalPot * 0.3;
       const rawThird = totalPot * 0.2;
@@ -239,6 +227,10 @@ function App() {
       const prizeThird = roundTo5k(rawThird);
       const prizeFirst = totalPot - prizeSecond - prizeThird;
       
+      // Determine ranks and prizes
+      let maxRank = 0;
+      players.forEach(p => { if(p.rank && p.rank > maxRank) maxRank = p.rank; });
+
       const updatedPlayers = players.map(p => {
           let prize = 0;
           if (p.rank === 1) prize = prizeFirst;
@@ -260,20 +252,17 @@ function App() {
         return newStats;
       });
 
-      // --- UPDATE BEER STATS ---
-      // Only the loser gets the beer stats incremented
-      const roundLoser = updatedPlayers.find(p => p.rank === updatedPlayers.length);
-      if (roundLoser) {
+      // --- UPDATE BEER STATS (ONLY LOSER) ---
+      const loser = updatedPlayers.find(p => p.rank === maxRank);
+      if (loser) {
           setBeerStats(prev => ({
               ...prev,
-              [roundLoser.id]: (prev[roundLoser.id] || 0) + 1
+              [loser.id]: (prev[loser.id] || 0) + 1
           }));
       }
 
-      const loser = updatedPlayers.find(p => p.rank === updatedPlayers.length);
       const winner = updatedPlayers.find(p => p.rank === 1);
       
-      // --- SEQUENCE LOGIC ---
       setFinishedView('WINNERS');
 
       if (loser) {
@@ -339,18 +328,28 @@ function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white font-sans selection:bg-green-500 selection:text-white flex flex-col overflow-hidden">
+    <div className="min-h-screen bg-slate-950 text-white font-sans flex flex-col overflow-hidden relative">
       
-      {/* Header - Compact for Mobile */}
-      <header className="p-2 text-center bg-slate-900/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-800 relative">
+      {/* Background 3D Environment Hints */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-slate-800 via-slate-950 to-black opacity-80 pointer-events-none z-0" />
+      <div className="absolute inset-0 opacity-20 pointer-events-none z-0" 
+           style={{ 
+             backgroundImage: 'linear-gradient(0deg, transparent 24%, rgba(255, 255, 255, .05) 25%, rgba(255, 255, 255, .05) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, .05) 75%, rgba(255, 255, 255, .05) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(255, 255, 255, .05) 25%, rgba(255, 255, 255, .05) 26%, transparent 27%, transparent 74%, rgba(255, 255, 255, .05) 75%, rgba(255, 255, 255, .05) 76%, transparent 77%, transparent)',
+             backgroundSize: '50px 50px',
+             transform: 'perspective(500px) rotateX(60deg) translateY(100px) scale(2)'
+           }} 
+      />
+
+      {/* Header */}
+      <header className="p-2 text-center bg-slate-900/90 backdrop-blur-md sticky top-0 z-50 border-b border-slate-800 shadow-2xl">
         <h1 className="text-xl md:text-4xl font-hand font-bold text-green-500 drop-shadow-[0_0_10px_rgba(34,197,94,0.5)] flex items-center justify-center gap-2 mb-1 uppercase tracking-wider">
           <Beer className="w-5 h-5 md:w-10 md:h-10 animate-bounce text-yellow-400" />
-          Đại Chiến Bia Huda
+          Đại Chiến Bia 3D
         </h1>
         
         <div className="flex flex-wrap justify-center items-center gap-2 md:gap-4">
             {/* Bet Selection */}
-            <div className="bg-slate-800 rounded-full px-2 py-0.5 md:px-4 md:py-2 flex items-center gap-2 border border-slate-700 scale-90 md:scale-100">
+            <div className="bg-slate-800 rounded-full px-2 py-0.5 md:px-4 md:py-2 flex items-center gap-2 border border-slate-700 scale-90 md:scale-100 shadow-inner">
                 <span className="text-slate-400 text-xs md:text-sm font-bold">Cược:</span>
                 {gameState === GameState.IDLE ? (
                     <select 
@@ -371,7 +370,7 @@ function App() {
             </div>
 
             {/* Total Pot Display */}
-            <div className="inline-flex items-center gap-1 md:gap-2 bg-slate-800 px-2 py-0.5 md:px-4 md:py-2 rounded-full border border-green-500/30 shadow-lg scale-90 md:scale-100">
+            <div className="inline-flex items-center gap-1 md:gap-2 bg-slate-800 px-2 py-0.5 md:px-4 md:py-2 rounded-full border border-green-500/30 shadow-[0_0_15px_rgba(34,197,94,0.2)] scale-90 md:scale-100">
                 <Coins className="text-yellow-400 w-4 h-4 md:w-5 md:h-5" />
                 <span className="text-yellow-400 font-bold text-sm md:text-lg">
                     {formatCurrency(totalPot)}
@@ -437,8 +436,17 @@ function App() {
         </div>
       </header>
 
-      {/* Main Game Area */}
-      <main className="flex-grow flex flex-col items-center justify-start pt-4 md:pt-8 px-2 w-full max-w-6xl mx-auto relative">
+      {/* Main Game Area - 3D SPACE */}
+      <main className="flex-grow flex flex-col items-center justify-center w-full relative overflow-hidden perspective-container">
+        <style>{`
+          .perspective-container {
+            perspective: 1000px;
+            perspective-origin: center 30%;
+          }
+          .preserve-3d {
+            transform-style: preserve-3d;
+          }
+        `}</style>
         
         {/* WINNERS CELEBRATION OVERLAY */}
         {finishedView === 'WINNERS' && (
@@ -524,8 +532,8 @@ function App() {
           </div>
         )}
 
-        {/* Player Grid */}
-        <div className="grid grid-cols-4 md:grid-cols-6 lg:grid-cols-6 gap-1 md:gap-4 w-full mb-14 md:mb-12">
+        {/* 3D Player Table Scene */}
+        <div className="preserve-3d flex justify-center items-end gap-2 md:gap-8 w-full max-w-6xl px-4 pb-20 transform transition-transform duration-1000 origin-bottom" style={{ transform: gameState === GameState.RACING ? 'rotateX(5deg) translateY(20px)' : 'rotateX(10deg)' }}>
           {players.map(player => (
             <PlayerCard 
                 key={player.id} 
@@ -537,43 +545,44 @@ function App() {
                 onUploadImage={gameState === GameState.IDLE ? (file) => handleImageUpload(player.id, file) : undefined}
                 onRemove={gameState === GameState.IDLE ? () => removePlayer(player.id) : undefined}
                 onNameChange={gameState === GameState.IDLE ? (name) => updatePlayerName(player.id, name) : undefined}
+                gameState={gameState}
             />
           ))}
           
-          {/* Add Player Button (Only in IDLE) */}
+          {/* Add Player "Seat" */}
           {gameState === GameState.IDLE && (
-              <button 
-                onClick={addPlayer}
-                className="flex flex-col items-center justify-center p-1 md:p-2 rounded-lg bg-slate-800/30 border border-dashed border-slate-600 hover:border-green-400 hover:bg-slate-800/50 transition-all group min-h-[100px] md:min-h-[280px]"
-              >
-                  <div className="w-6 h-6 md:w-16 md:h-16 rounded-full bg-slate-700 flex items-center justify-center mb-1 md:mb-3 group-hover:scale-110 transition-transform">
-                      <UserPlus className="w-3 h-3 md:w-8 md:h-8 text-slate-400 group-hover:text-green-400" />
-                  </div>
-                  <span className="text-[9px] md:text-base text-slate-400 font-bold group-hover:text-green-400">Thêm</span>
-              </button>
+              <div className="flex flex-col items-center justify-end h-[200px] md:h-[300px] pb-4">
+                <button 
+                    onClick={addPlayer}
+                    className="w-16 h-16 md:w-24 md:h-24 rounded-full bg-slate-800/50 border-2 border-dashed border-slate-600 hover:border-green-400 hover:bg-slate-800 flex items-center justify-center group transition-all shadow-xl hover:shadow-green-500/20 hover:-translate-y-2"
+                >
+                    <UserPlus className="w-6 h-6 md:w-10 md:h-10 text-slate-500 group-hover:text-green-400" />
+                </button>
+                <span className="mt-2 text-slate-500 text-xs font-bold">Thêm ghế</span>
+              </div>
           )}
         </div>
 
         {/* Controls */}
-        <div className="flex gap-6 mt-auto mb-4 fixed bottom-2 left-1/2 -translate-x-1/2 z-40">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-full flex justify-center pointer-events-auto">
           {gameState === GameState.IDLE && (
             <div className="flex flex-col items-center gap-1">
                 <button 
                 onClick={startGame}
-                className="group relative px-6 py-2 md:px-8 md:py-4 bg-green-600 hover:bg-green-500 text-white font-bold text-lg md:text-xl rounded-full shadow-[0_0_20px_rgba(34,197,94,0.6)] transition-all hover:scale-105 active:scale-95 flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                className="group relative px-8 py-3 md:px-12 md:py-5 bg-gradient-to-b from-green-500 to-green-700 hover:from-green-400 hover:to-green-600 text-white font-bold text-xl md:text-2xl rounded-2xl shadow-[0_10px_30px_rgba(34,197,94,0.4),0_4px_0_#15803d] transition-all hover:translate-y-[-2px] active:translate-y-[2px] active:shadow-none flex items-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap border border-green-400/30"
                 disabled={players.length < 2}
                 >
-                <Play className="w-5 h-5 md:w-6 md:h-6 fill-current" />
-                Zô 100%
-                <span className="absolute -inset-1 rounded-full bg-green-400 opacity-30 group-hover:animate-ping"></span>
+                <Play className="w-6 h-6 md:w-8 md:h-8 fill-current" />
+                ZÔ 100%
+                <span className="absolute -inset-1 rounded-xl bg-white opacity-10 group-hover:animate-pulse"></span>
                 </button>
             </div>
           )}
 
           {gameState === GameState.RACING && (
-             <div className="text-lg md:text-2xl font-bold text-green-500 animate-pulse flex items-center gap-2 bg-slate-900/80 px-4 py-2 rounded-full border border-green-500/50">
-                <Beer className="animate-spin w-5 h-5 md:w-8 md:h-8" />
-                Uống...
+             <div className="text-xl md:text-3xl font-hand font-bold text-white animate-pulse flex items-center gap-3 bg-black/60 backdrop-blur px-8 py-3 rounded-full border border-green-500/50 shadow-2xl">
+                <Beer className="animate-spin w-6 h-6 md:w-8 md:h-8 text-yellow-400" />
+                Đang nốc...
              </div>
           )}
 
@@ -589,10 +598,6 @@ function App() {
         </div>
 
       </main>
-
-      <footer className="p-1 text-center text-slate-600 text-[9px] md:text-sm bg-slate-900">
-        Đậm tình miền Trung - Powered by Gemini
-      </footer>
     </div>
   );
 }
